@@ -1,0 +1,25 @@
+{
+  "name": "catenis-api-emulator",
+  "version": "1.0.0",
+  "description": "Catenis API emulator meant to be used for testing Catenis API clients.",
+  "type": "module",
+  "main": "src/main.js",
+  "bin": "src/main.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "Catenis",
+    "Blockchain of Things"
+  ],
+  "author": {
+    "name": "Cláudio Sá de Castro",
+    "email": "claudio@hiades.com.br"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "command-line-args": "^5.2.1",
+    "dayjs": "^1.11.7",
+    "type-check": "^0.4.0"
+  }
+}
