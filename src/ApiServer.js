@@ -3,7 +3,6 @@
  */
 import { createServer } from 'node:http';
 import {
-    typeCheck,
     parseType,
     parsedTypeCheck
 } from 'type-check';
@@ -17,7 +16,7 @@ import {
     signHttpRequest
 } from './Authentication.js';
 
-const httpContentType = parseType(`{
+const httpContextType = parseType(`{
     expectedRequest: {
         httpMethod: HttpMethod,
         apiMethodPath: HttpPath,
@@ -34,7 +33,10 @@ const httpContentType = parseType(`{
 const deviceCredentialsType = parseType(`{
     deviceId: NonEmptyString,
     apiAccessSecret: String
-}`);
+} | [{
+    deviceId: NonEmptyString,
+    apiAccessSecret: String
+}]`);
 
 const httpMethodTypeDef = {
     typeOf: 'String',
@@ -42,7 +44,7 @@ const httpMethodTypeDef = {
 };
 const httpPathTypeDef = {
     typeOf: 'String',
-    validate: (d) => {
+    validate: d => {
         let ok = true;
 
         try {
@@ -55,9 +57,9 @@ const httpPathTypeDef = {
         return ok;
     }
 };
-const jsonDataTypeDef = {
+export const jsonDataTypeDef = {
     typeOf: 'String',
-    validate: (d) => {
+    validate: d => {
         let ok;
 
         try {
@@ -71,9 +73,9 @@ const jsonDataTypeDef = {
         return ok;
     }
 };
-const nonEmptyStringTypeDef = {
+export const nonEmptyStringTypeDef = {
     typeOf: 'String',
-    validate: (d) => d.length > 0
+    validate: d => d.length > 0
 };
 
 /**
@@ -112,30 +114,40 @@ const nonEmptyStringTypeDef = {
  */
 
 /**
- * @typedef {Object} DeviceCredentials
+ * @typedef {Object} SingleDeviceCredentials
  * @property {string} deviceId
  * @property {string} apiAccessSecret
+ */
+
+/**
+ * @typedef {SingleDeviceCredentials[]} DeviceCredentialsList
+ */
+
+/**
+ * @typedef {(SingleDeviceCredentials|DeviceCredentialsList)} DeviceCredentials
  */
 
 export class ApiServer {
     /**
      * @param {number} port
      * @param {string} apiVersion
-     * @param {DeviceCredentials} [credentials]
      */
-    constructor(port, apiVersion, credentials) {
+    constructor(port, apiVersion) {
         this.port = port;
         this.apiBasePath = `/api/${apiVersion}/`;
         /**
-         * @type {DeviceCredentials}
+         * @type {Map<string, SingleDeviceCredentials>}
          */
-        this._credentials = credentials;
+        this._deviceCredentials = new Map();
         /**
          * @type {HttpContext}
          */
         this._httpContext = undefined;
     }
 
+    /**
+     * @return {HttpContext}
+     */
     get httpContext() {
         return this._httpContext;
     }
@@ -151,8 +163,11 @@ export class ApiServer {
         this._httpContext = data;
     }
 
+    /**
+     * @return {DeviceCredentialsList}
+     */
     get credentials() {
-        return this._credentials;
+        return Array.from(this._deviceCredentials.values());
     }
 
     /**
@@ -163,7 +178,11 @@ export class ApiServer {
             throw new TypeError('Not a valid DeviceCredentials data type');
         }
 
-        this._credentials = data;
+        this._deviceCredentials.clear();
+
+        for (const singleCredentials of (Array.isArray(data) ? data : [data])) {
+            this._deviceCredentials.set(singleCredentials.deviceId, singleCredentials);
+        }
     }
 
     /**
@@ -225,64 +244,12 @@ export class ApiServer {
                 }
 
                 if (this._httpContext.expectedRequest.authenticate === true || this._httpContext.expectedRequest.authenticate === undefined) {
-                    if (!this._credentials) {
-                        sendErrorResponse(req, res, 500, 'Missing device credentials');
-                        return;
-                    }
-
                     // Authenticate request
-                    try {
-                        // Parse HTTP request to retrieve relevant authentication data
-                        const authData = parseHttpRequestAuthentication(req.headers);
+                    const authResult = this.authenticateRequest(req, reqBody);
 
-                        if (authData.deviceId !== this._credentials.deviceId) {
-                            sendErrorResponse(req, res, 500, `Inconsistent device ID in signature: expected: ${this._credentials.deviceId}; received: ${authData.deviceId}`);
-                            return;
-                        }
-
-                        // Sign request and validate signature
-                        const reqSignature = signHttpRequest(req, {
-                            timestamp: authData.timestamp,
-                            signDate: authData.signDate,
-                            apiAccessSecret: this._credentials.apiAccessSecret,
-                            reqBody: reqBody !== undefined ? reqBody : await readData(req)
-                        });
-
-                        if (reqSignature !== authData.signature) {
-                            sendErrorResponse(req, res, 500, `Inconsistent request signature:\n expected: ${reqSignature}\n received: ${authData.signature}`);
-                            return;
-                        }
-                    }
-                    catch (err) {
-                        let error;
-
-                        if (err instanceof AuthenticationError) {
-                            if (err.code === 'parse_err_missing_headers') {
-                                sendErrorResponse(req, res, 401, 'Authorization failed; missing required HTTP headers');
-                            }
-                            else if (err.code === 'parse_err_malformed_timestamp') {
-                                sendErrorResponse(req, res, 401, 'Authorization failed; timestamp not well formed');
-                            }
-                            else if (err.code === 'parse_err_timestamp_out_of_bounds') {
-                                sendErrorResponse(req, res, 401, 'Authorization failed; timestamp not within acceptable time variation');
-                            }
-                            else if (err.code === 'parse_err_malformed_auth_header') {
-                                sendErrorResponse(req, res, 401, 'Authorization failed; authorization value not well formed');
-                            }
-                            else if (err.code === 'parse_err_malformed_sign_date') {
-                                sendErrorResponse(req, res, 401, 'Authorization failed; signature date not well formed');
-                            }
-                            else if (err.code === 'parse_err_sign_date_out_of_bounds') {
-                                sendErrorResponse(req, res, 401, 'Authorization failed; signature date out of bounds');
-                            }
-                            else {
-                                sendErrorResponse(req, res, 500, 'Internal server error');
-                            }
-                        }
-                        else {
-                            sendErrorResponse(req, res, 500, 'Internal server error');
-                        }
-
+                    if (typeof authResult === 'object') {
+                        // Authentication has failed. Send error response
+                        sendErrorResponse(req, res, authResult.code, authResult.message);
                         return;
                     }
                 }
@@ -347,6 +314,112 @@ export class ApiServer {
 
         return promise;
     }
+
+    /**
+     * @typedef {Object} ErrorResponseInfo
+     * @property {number} code
+     * @property {string} message
+     */
+
+    /**
+     * Authenticate an incoming HTTP request.
+     * @param {module:http.IncomingMessage} req
+     * @param {Buffer} [reqBody]
+     * @return {(string|ErrorResponseInfo)} The ID of the authenticated virtual device if successful, or the information
+     *                                       about the error to be sent as the response.
+     */
+    authenticateRequest(req, reqBody) {
+        try {
+            // Parse HTTP request to retrieve relevant authentication data
+            const authData = parseHttpRequestAuthentication(req.headers);
+
+            // Get credentials of the device to authenticate
+            const deviceCredentials = this._deviceCredentials.get(authData.deviceId);
+
+            if (!deviceCredentials) {
+                // No device found. Return error
+                return {
+                    code: 401,
+                    message: 'Authorization failed; invalid device or signature'
+                };
+            }
+
+            // Sign request and validate signature
+            const reqSignature = signHttpRequest(req, {
+                timestamp: authData.timestamp,
+                signDate: authData.signDate,
+                apiAccessSecret: deviceCredentials.apiAccessSecret,
+                reqBody: reqBody !== undefined ? reqBody : Buffer.from('')
+            });
+
+            if (reqSignature !== authData.signature) {
+                // Invalid signature. Return error
+                return {
+                    code: 401,
+                    message: 'Authorization failed; invalid device or signature'
+                };
+            }
+
+            // Success. Return ID of authenticated virtual device
+            return authData.deviceId;
+        }
+        catch (err) {
+            let error;
+
+            if (err instanceof AuthenticationError) {
+                if (err.code === 'parse_err_missing_headers') {
+                    error = {
+                        code: 401,
+                        message: 'Authorization failed; missing required HTTP headers'
+                    };
+                }
+                else if (err.code === 'parse_err_malformed_timestamp') {
+                    error = {
+                        code: 401,
+                        message: 'Authorization failed; timestamp not well formed'
+                    };
+                }
+                else if (err.code === 'parse_err_timestamp_out_of_bounds') {
+                    error = {
+                        code: 401,
+                        message: 'Authorization failed; timestamp not within acceptable time variation'
+                    };
+                }
+                else if (err.code === 'parse_err_malformed_auth_header') {
+                    error = {
+                        code: 401,
+                        message: 'Authorization failed; authorization value not well formed'
+                    };
+                }
+                else if (err.code === 'parse_err_malformed_sign_date') {
+                    error = {
+                        code: 401,
+                        message: 'Authorization failed; signature date not well formed'
+                    };
+                }
+                else if (err.code === 'parse_err_sign_date_out_of_bounds') {
+                    error = {
+                        code: 401,
+                        message: 'Authorization failed; signature date out of bounds'
+                    };
+                }
+                else {
+                    error = {
+                        code: 500,
+                        message: 'Internal server error'
+                    };
+                }
+            }
+            else {
+                error = {
+                    code: 500,
+                    message: 'Internal server error'
+                };
+            }
+
+            return error;
+        }
+    }
 }
 
 /**
@@ -354,7 +427,7 @@ export class ApiServer {
  * @return {boolean}
  */
 function isValidHttpContext(data) {
-    return parsedTypeCheck(httpContentType, data, {
+    return parsedTypeCheck(httpContextType, data, {
         customTypes: {
             HttpMethod: httpMethodTypeDef,
             HttpPath: httpPathTypeDef,

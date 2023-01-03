@@ -15,9 +15,10 @@ const signVersionId = 'CTN1',
     signMethodId = 'CTN1-HMAC-SHA256',
     scopeRequest = 'ctn1_request',
     signValidDays = 7,
-    timestampHdr = 'x-bcot-timestamp',
-    allowedTimestampOffset = 300,
+    allowedTimestampOffset = 300;
+export const timestampHdr = 'x-bcot-timestamp',
     authHeader = 'authorization';
+
 const authRegex = new RegExp(`^${signMethodId} +(?:C|c)redential *= *(\\w{20})/(\\d{8})/${scopeRequest} *, *(?:S|s)ignature *= *([0-9a-fA-F]{64}) *$`);
 
 export class AuthenticationError extends Error {
@@ -90,7 +91,7 @@ export function parseHttpRequestAuthentication(headers) {
 
     if (!signDate.isValid()) {
         // Signature date not well formed. Log error and throw exception
-        throw new Meteor.Error('ctn_auth_parse_err_malformed_sign_date', 'Error parsing HTTP request for authentication: signature date not well formed');
+        throw new AuthenticationError('parse_err_malformed_sign_date', 'Error parsing HTTP request for authentication: signature date not well formed');
     }
 
     if (!now.utc().isBetween(signDate, signDate.add(signValidDays, 'days'), 'day', '[)')) {

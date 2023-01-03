@@ -3,7 +3,7 @@
  */
 
 /**
- * Checks whether a HTTP request has a JSON content type.
+ * Checks whether an HTTP request has a JSON content type.
  * @param {module:http.IncomingMessage} req
  */
 export function hasJSONContentType(req) {
@@ -13,7 +13,7 @@ export function hasJSONContentType(req) {
 }
 
 /**
- * Read data received from a HTTP request.
+ * Read data received from an HTTP request.
  * @param {module:http.IncomingMessage} req
  * @return {Promise<Buffer>}
  */

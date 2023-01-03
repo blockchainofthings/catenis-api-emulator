@@ -11,10 +11,12 @@ export class CommandServer {
     /**
      * @param {number} port
      * @param {ApiServer} apiServer
+     * @param {WSNotificationServer} wsNotifyServer
      */
-    constructor(port, apiServer) {
+    constructor(port, apiServer, wsNotifyServer) {
         this.port = port;
         this.apiServer = apiServer;
+        this.wsNotifyServer = wsNotifyServer;
     }
 
     /**
@@ -26,18 +28,31 @@ export class CommandServer {
                 const url = new URL(req.url, `http://${req.headers.host}`);
 
                 switch (url.pathname) {
-                    case '/close': {
-                        if (req.method === 'POST') {
-                            try {
-                                // Close API server, and return
-                                await this.apiServer.close();
-                                sendSuccessResponse(req, res);
+                    case '/device-credentials': {
+                        if (req.method === 'GET') {
+                            sendSuccessResponse(req, res, JSON.stringify(this.apiServer.credentials));
+                        }
+                        else if (req.method === 'POST' && hasJSONContentType(req)) {
+                            const body = await readData(req);
+                            let error = false;
 
-                                // And now, close Command server
-                                await this.close();
+                            try {
+                                const parsedBody = JSON.parse(body.toString());
+
+                                try {
+                                    this.apiServer.credentials = parsedBody;
+                                    sendSuccessResponse(req, res);
+                                }
+                                catch (err) {
+                                    error = true;
+                                }
                             }
                             catch (err) {
-                                sendErrorResponse(req, res, 500);
+                                error = true;
+                            }
+
+                            if (error) {
+                                sendErrorResponse(req, res, 400, 'Invalid device credentials');
                             }
                         }
                         else {
@@ -81,9 +96,9 @@ export class CommandServer {
                         break;
                     }
 
-                    case '/device-credentials': {
+                    case '/notify-context': {
                         if (req.method === 'GET') {
-                            sendSuccessResponse(req, res, JSON.stringify(this.apiServer.credentials));
+                            sendSuccessResponse(req, res, JSON.stringify(this.wsNotifyServer.notifyContext));
                         }
                         else if (req.method === 'POST' && hasJSONContentType(req)) {
                             const body = await readData(req);
@@ -93,7 +108,7 @@ export class CommandServer {
                                 const parsedBody = JSON.parse(body.toString());
 
                                 try {
-                                    this.apiServer.credentials = parsedBody;
+                                    this.wsNotifyServer.notifyContext = parsedBody;
                                     sendSuccessResponse(req, res);
                                 }
                                 catch (err) {
@@ -105,7 +120,46 @@ export class CommandServer {
                             }
 
                             if (error) {
-                                sendErrorResponse(req, res, 400, 'Invalid device credentials');
+                                sendErrorResponse(req, res, 400, 'Invalid notification context');
+                            }
+                        }
+                        else {
+                            sendErrorResponse(req, res, 404);
+                        }
+
+                        break;
+                    }
+
+                    case '/notify-close': {
+                        if (req.method === 'POST') {
+                            try {
+                                // Close all WebSocket notification connection
+                                this.wsNotifyServer.closeAllClients();
+                                sendSuccessResponse(req, res);
+                            }
+                            catch (err) {
+                                sendErrorResponse(req, res, 500);
+                            }
+                        }
+                        else {
+                            sendErrorResponse(req, res, 404);
+                        }
+
+                        break;
+                    }
+
+                    case '/close': {
+                        if (req.method === 'POST') {
+                            try {
+                                // Close API server, and return
+                                await this.apiServer.close();
+                                sendSuccessResponse(req, res);
+
+                                // And now, close Command server
+                                await this.close();
+                            }
+                            catch (err) {
+                                sendErrorResponse(req, res, 500);
                             }
                         }
                         else {
