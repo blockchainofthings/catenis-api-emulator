@@ -15,6 +15,7 @@ import {
     parseHttpRequestAuthentication,
     signHttpRequest
 } from './Authentication.js';
+import { display } from './main.js';
 
 const httpContextType = parseType(`{
     expectedRequest: {
@@ -270,11 +271,11 @@ export class ApiServer {
             });
 
             this.server.on('close', () => {
-                console.log('[Catenis API Emulator] - API server shut down');
+                display.log('[Catenis API Emulator] - API server shut down');
             });
 
             this.server.listen(this.port, () => {
-                console.log(`[Catenis API Emulator] - API server listening at port ${this.port}`);
+                display.log(`[Catenis API Emulator] - API server listening at port ${this.port}`);
                 promiseCall.resolve();
             });
         }

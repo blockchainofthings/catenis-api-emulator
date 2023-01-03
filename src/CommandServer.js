@@ -2,21 +2,25 @@
  * Created by claudio on 2022-12-21
  */
 import { createServer } from 'node:http';
+import { readFile } from 'node:fs/promises';
 import {
     hasJSONContentType,
     readData
 } from './RequestUtil.js';
+import { display } from './main.js';
 
 export class CommandServer {
     /**
      * @param {number} port
      * @param {ApiServer} apiServer
      * @param {WSNotificationServer} wsNotifyServer
+     * @param {string} appVersion
      */
-    constructor(port, apiServer, wsNotifyServer) {
+    constructor(port, apiServer, wsNotifyServer, appVersion) {
         this.port = port;
         this.apiServer = apiServer;
         this.wsNotifyServer = wsNotifyServer;
+        this.appVersion = appVersion;
     }
 
     /**
@@ -148,6 +152,14 @@ export class CommandServer {
                         break;
                     }
 
+                    case '/info': {
+                        if (req.method === 'GET') {
+                            sendSuccessResponse(req, res, JSON.stringify(`Catenis API Emulator (ver. ${this.appVersion})`));
+                        }
+
+                        break;
+                    }
+
                     case '/close': {
                         if (req.method === 'POST') {
                             try {
@@ -175,11 +187,11 @@ export class CommandServer {
             });
 
             this.server.on('close', () => {
-                console.log('[Catenis API Emulator] - Command server shut down');
+                display.log('[Catenis API Emulator] - Command server shut down');
             });
 
             this.server.listen(this.port, () => {
-                console.log(`[Catenis API Emulator] - Command server listening at port ${this.port}`);
+                display.log(`[Catenis API Emulator] - Command server listening at port ${this.port}`);
             });
         }
     }
