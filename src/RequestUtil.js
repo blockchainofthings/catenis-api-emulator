@@ -42,3 +42,13 @@ export function readData(req) {
 
     return promise;
 }
+
+/**
+ * Check whether an HTTP request is a CORS preflight request.
+ * @param {module:http.IncomingMessage} req
+ * @return {boolean}
+ */
+export function isCORSPreflightRequest(req) {
+    return req.method === 'OPTIONS' && (('access-control-request-headers' in req.headers)
+        || ('access-control-request-method' in req.headers));
+}

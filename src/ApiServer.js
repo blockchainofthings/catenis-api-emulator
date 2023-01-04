@@ -8,7 +8,8 @@ import {
 } from 'type-check';
 import {
     hasJSONContentType,
-    readData
+    readData,
+    isCORSPreflightRequest
 } from './RequestUtil.js';
 import {
     AuthenticationError,
@@ -201,6 +202,12 @@ export class ApiServer {
 
         if (!this.server) {
             this.server = createServer(async (req, res) => {
+                // Filter and process CORS preflight request
+                if (isCORSPreflightRequest(req)) {
+                    sendCORSPreflightResponse(req, res);
+                    return;
+                }
+
                 if (!this._httpContext) {
                     sendErrorResponse(req, res, 500, 'Missing HTTP context');
                     return;
@@ -507,6 +514,28 @@ function sendErrorResponse(req, res, statusCode, errorMessage) {
 
     res.writeHead(statusCode, headers);
     res.end(resData);
+}
+
+/**
+ * @param {module:http.IncomingMessage} req
+ * @param {module:http.ServerResponse} res
+ */
+function sendCORSPreflightResponse(req, res) {
+    const reqOrigin = req.headers['origin'];
+
+    let headers = {
+        'Access-Control-Allow-Origin': reqOrigin || '*',
+        'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+        'Access-Control-Allow-Headers': 'DNT, X-CustomHeader, Keep-Alive, User-Agent, X-Requested-With, If-Modified-Since, Cache-Control, Accept, Origin, Content-Type, Content-Encoding, Accept-Encoding, X-Bcot-Timestamp, Authorization',
+        'Access-Control-Max-Age': 86400
+    };
+
+    if (reqOrigin) {
+        headers['Vary'] = 'Origin';
+    }
+
+    res.writeHead(204, headers);
+    res.end();
 }
 
 /**
