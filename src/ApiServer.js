@@ -29,7 +29,7 @@ const httpContextType = parseType(`{
         data: JsonData
     } | {
         statusCode: Number,
-        errorMessage: String
+        errorMessage: Maybe String
     }
 }`);
 const deviceCredentialsType = parseType(`{
@@ -97,7 +97,7 @@ export const nonEmptyStringTypeDef = {
 /**
  * @typedef {Object} HttpErrorResponse
  * @property {number} statusCode
- * @property {string} errorMessage
+ * @property {string} [errorMessage]
  */
 
 /**
@@ -265,11 +265,11 @@ export class ApiServer {
                 if (this._httpContext.requiredResponse) {
                     const requiredResponse = this._httpContext.requiredResponse;
 
-                    if (requiredResponse.errorMessage) {
-                        sendErrorResponse(req, res, requiredResponse.statusCode, requiredResponse.errorMessage);
+                    if (requiredResponse.data) {
+                        sendSuccessResponse(req, res, JSON.parse(requiredResponse.data));
                     }
                     else {
-                        sendSuccessResponse(req, res, JSON.parse(requiredResponse.data));
+                        sendErrorResponse(req, res, requiredResponse.statusCode, requiredResponse.errorMessage);
                     }
                 }
                 else {
@@ -491,7 +491,7 @@ function sendSuccessResponse(req, res, data) {
  * @param {module:http.IncomingMessage} req
  * @param {module:http.ServerResponse} res
  * @param {number} statusCode
- * @param {string} errorMessage
+ * @param {string} [errorMessage]
  */
 function sendErrorResponse(req, res, statusCode, errorMessage) {
     const reqOrigin = req.headers['origin'];
@@ -504,13 +504,17 @@ function sendErrorResponse(req, res, statusCode, errorMessage) {
         headers['Vary'] = 'Origin';
     }
 
-    const resData = JSON.stringify({
-        status: 'error',
-        message: errorMessage
-    }, null, 2);
+    let resData;
 
-    headers['Content-Type'] = 'application/json';
-    headers['Content-Length'] = Buffer.byteLength(resData);
+    if (errorMessage) {
+        resData = JSON.stringify({
+            status: 'error',
+            message: errorMessage
+        }, null, 2);
+
+        headers['Content-Type'] = 'application/json';
+        headers['Content-Length'] = Buffer.byteLength(resData);
+    }
 
     res.writeHead(statusCode, headers);
     res.end(resData);
