@@ -223,25 +223,25 @@ export class ApiServer {
                         return;
                     }
 
-                    let reqBody;
+                    // Validate request body
+                    const reqBody = await readData(req);
 
-                    if (this._httpContext.expectedRequest.data) {
-                        // Validate request body
-                        reqBody = await readData(req);
-
-                        if (reqBody.length > 0) {
-                            if (!hasJSONContentType(req)) {
-                                sendErrorResponse(req, res, 500, `Inconsistent content type: expected: application/json; received: ${req.headers['content-type']}`);
-                                return;
-                            }
-
-                            const strBody = reqBody.toString();
-
-                            if (strBody !== this._httpContext.expectedRequest.data) {
-                                sendErrorResponse(req, res, 500, `Unexpected HTTP request body:\n expected: ${this._httpContext.expectedRequest.data}\n received: ${strBody}`);
-                                return;
-                            }
+                    if (reqBody.length > 0) {
+                        if (!hasJSONContentType(req)) {
+                            sendErrorResponse(req, res, 500, `Inconsistent content type: expected: application/json; received: ${req.headers['content-type']}`);
+                            return;
                         }
+
+                        const strBody = reqBody.toString();
+
+                        if (strBody !== this._httpContext.expectedRequest.data) {
+                            sendErrorResponse(req, res, 500, `Unexpected HTTP request body:\n expected: ${this._httpContext.expectedRequest.data}\n received: ${strBody}`);
+                            return;
+                        }
+                    }
+                    else if (this._httpContext.expectedRequest.data) {
+                        sendErrorResponse(req, res, 500, `Unexpected HTTP request body:\n expected: ${this._httpContext.expectedRequest.data}\n received: ${undefined}`);
+                        return;
                     }
 
                     if (this._httpContext.expectedRequest.authenticate === true || this._httpContext.expectedRequest.authenticate === undefined) {
