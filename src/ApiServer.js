@@ -192,105 +192,97 @@ export class ApiServer {
      * @return {Promise<void>}
      */
     start() {
-        let promiseCall;
-        const promise = new Promise((resolve, reject) => {
-            promiseCall = {
-                resolve,
-                reject
-            }
-        });
-
-        if (!this.server) {
-            this.server = createServer(async (req, res) => {
-                // Filter and process CORS preflight request
-                if (isCORSPreflightRequest(req)) {
-                    sendCORSPreflightResponse(req, res);
-                    return;
-                }
-
-                if (!this._httpContext) {
-                    sendErrorResponse(req, res, 500, 'Missing HTTP context');
-                    return;
-                }
-
-                const url = new URL(req.url, `http://${req.headers.host}`);
-
-                // Validate request method
-                if (req.method !== this._httpContext.expectedRequest.httpMethod) {
-                    sendErrorResponse(req, res, 500, `Unexpected HTTP request method: expected: ${this._httpContext.expectedRequest.httpMethod}; received: ${req.method}`);
-                    return;
-                }
-
-                const apiMethodPath = this._httpContext.expectedRequest.apiMethodPath;
-                const expectedUrl = new URL(apiMethodPath.startsWith('/') ? apiMethodPath.substring(1) : apiMethodPath, new URL(this.apiBasePath, `http://${req.headers.host}`).href);
-
-                // Validate request path
-                if (url.pathname !== expectedUrl.pathname || !areUrlsSearchEqual(url, expectedUrl)) {
-                    sendErrorResponse(req, res, 500, `Unexpected HTTP request path: expected: ${expectedUrl.pathname + expectedUrl.search}; received: ${url.pathname + url.search}`);
-                    return;
-                }
-
-                let reqBody;
-
-                if (this._httpContext.expectedRequest.data) {
-                    // Validate request body
-                    reqBody = await readData(req);
-
-                    if (reqBody.length > 0) {
-                        if (!hasJSONContentType(req)) {
-                            sendErrorResponse(req, res, 500, `Inconsistent content type: expected: application/json; received: ${req.headers['content-type']}`);
-                            return;
-                        }
-
-                        const strBody = reqBody.toString();
-
-                        if (strBody !== this._httpContext.expectedRequest.data) {
-                            sendErrorResponse(req, res, 500, `Unexpected HTTP request body:\n expected: ${this._httpContext.expectedRequest.data}\n received: ${strBody}`);
-                            return;
-                        }
-                    }
-                }
-
-                if (this._httpContext.expectedRequest.authenticate === true || this._httpContext.expectedRequest.authenticate === undefined) {
-                    // Authenticate request
-                    const authResult = this.authenticateRequest(req, reqBody);
-
-                    if (typeof authResult === 'object') {
-                        // Authentication has failed. Send error response
-                        sendErrorResponse(req, res, authResult.code, authResult.message);
+        return new Promise((resolve, reject) => {
+            if (!this.server) {
+                this.server = createServer(async (req, res) => {
+                    // Filter and process CORS preflight request
+                    if (isCORSPreflightRequest(req)) {
+                        sendCORSPreflightResponse(req, res);
                         return;
                     }
-                }
 
-                if (this._httpContext.requiredResponse) {
-                    const requiredResponse = this._httpContext.requiredResponse;
+                    if (!this._httpContext) {
+                        sendErrorResponse(req, res, 500, 'Missing HTTP context');
+                        return;
+                    }
 
-                    if (requiredResponse.data) {
-                        sendSuccessResponse(req, res, JSON.parse(requiredResponse.data));
+                    const url = new URL(req.url, `http://${req.headers.host}`);
+
+                    // Validate request method
+                    if (req.method !== this._httpContext.expectedRequest.httpMethod) {
+                        sendErrorResponse(req, res, 500, `Unexpected HTTP request method: expected: ${this._httpContext.expectedRequest.httpMethod}; received: ${req.method}`);
+                        return;
+                    }
+
+                    const apiMethodPath = this._httpContext.expectedRequest.apiMethodPath;
+                    const expectedUrl = new URL(apiMethodPath.startsWith('/') ? apiMethodPath.substring(1) : apiMethodPath, new URL(this.apiBasePath, `http://${req.headers.host}`).href);
+
+                    // Validate request path
+                    if (url.pathname !== expectedUrl.pathname || !areUrlsSearchEqual(url, expectedUrl)) {
+                        sendErrorResponse(req, res, 500, `Unexpected HTTP request path: expected: ${expectedUrl.pathname + expectedUrl.search}; received: ${url.pathname + url.search}`);
+                        return;
+                    }
+
+                    let reqBody;
+
+                    if (this._httpContext.expectedRequest.data) {
+                        // Validate request body
+                        reqBody = await readData(req);
+
+                        if (reqBody.length > 0) {
+                            if (!hasJSONContentType(req)) {
+                                sendErrorResponse(req, res, 500, `Inconsistent content type: expected: application/json; received: ${req.headers['content-type']}`);
+                                return;
+                            }
+
+                            const strBody = reqBody.toString();
+
+                            if (strBody !== this._httpContext.expectedRequest.data) {
+                                sendErrorResponse(req, res, 500, `Unexpected HTTP request body:\n expected: ${this._httpContext.expectedRequest.data}\n received: ${strBody}`);
+                                return;
+                            }
+                        }
+                    }
+
+                    if (this._httpContext.expectedRequest.authenticate === true || this._httpContext.expectedRequest.authenticate === undefined) {
+                        // Authenticate request
+                        const authResult = this.authenticateRequest(req, reqBody);
+
+                        if (typeof authResult === 'object') {
+                            // Authentication has failed. Send error response
+                            sendErrorResponse(req, res, authResult.code, authResult.message);
+                            return;
+                        }
+                    }
+
+                    if (this._httpContext.requiredResponse) {
+                        const requiredResponse = this._httpContext.requiredResponse;
+
+                        if (requiredResponse.data) {
+                            sendSuccessResponse(req, res, JSON.parse(requiredResponse.data));
+                        }
+                        else {
+                            sendErrorResponse(req, res, requiredResponse.statusCode, requiredResponse.errorMessage);
+                        }
                     }
                     else {
-                        sendErrorResponse(req, res, requiredResponse.statusCode, requiredResponse.errorMessage);
+                        sendSuccessResponse(req, res);
                     }
-                }
-                else {
-                    sendSuccessResponse(req, res);
-                }
-            });
+                });
 
-            this.server.on('close', () => {
-                display.log('[Catenis API Emulator] - API server shut down');
-            });
+                this.server.on('close', () => {
+                    display.log('[Catenis API Emulator] - API server shut down');
+                });
 
-            this.server.listen(this.port, () => {
-                display.log(`[Catenis API Emulator] - API server listening at port ${this.port}`);
-                promiseCall.resolve();
-            });
-        }
-        else {
-            promiseCall.resolve();
-        }
-
-        return promise;
+                this.server.listen(this.port, () => {
+                    display.log(`[Catenis API Emulator] - API server listening at port ${this.port}`);
+                    resolve();
+                });
+            }
+            else {
+                resolve();
+            }
+        });
     }
 
     /**
@@ -298,29 +290,21 @@ export class ApiServer {
      * @return {Promise<void>}
      */
     close() {
-        let promiseCall;
-        const promise = new Promise((resolve, reject) => {
-            promiseCall = {
-                resolve,
-                reject
+        return new Promise((resolve, reject) => {
+            if (this.server) {
+                this.server.close((error) => {
+                    if (error) {
+                        reject(error);
+                    }
+                    else {
+                        resolve();
+                    }
+                });
+            }
+            else {
+                resolve();
             }
         });
-
-        if (this.server) {
-            this.server.close((error) => {
-                if (error) {
-                    promiseCall.reject(error);
-                }
-                else {
-                    promiseCall.resolve();
-                }
-            });
-        }
-        else {
-            promiseCall.resolve();
-        }
-
-        return promise;
     }
 
     /**

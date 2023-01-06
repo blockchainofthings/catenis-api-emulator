@@ -207,29 +207,21 @@ export class CommandServer {
      * @return {Promise<void>}
      */
     close() {
-        let promiseCall;
-        const promise = new Promise((resolve, reject) => {
-            promiseCall = {
-                resolve,
-                reject
+        return new Promise((resolve, reject) => {
+            if (this.server) {
+                this.server.close((error) => {
+                    if (error) {
+                        reject(error);
+                    }
+                    else {
+                        resolve();
+                    }
+                });
+            }
+            else {
+                resolve();
             }
         });
-
-        if (this.server) {
-            this.server.close((error) => {
-                if (error) {
-                    promiseCall.reject(error);
-                }
-                else {
-                    promiseCall.resolve();
-                }
-            });
-        }
-        else {
-            promiseCall.resolve();
-        }
-
-        return promise;
     }
 }
 

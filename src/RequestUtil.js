@@ -18,29 +18,23 @@ export function hasJSONContentType(req) {
  * @return {Promise<Buffer>}
  */
 export function readData(req) {
-    let promiseCall;
-    const promise = new Promise((resolve, reject) => {
-        promiseCall = {
-            resolve,
-            reject
-        }
+    return new Promise((resolve, reject) => {
+        const dataChunks = [];
+        let dataLength = 0;
+
+        req.on('error', error => reject(error));
+
+        req.on('readable', () => {
+            let dataChunk;
+
+            while ((dataChunk = req.read()) !== null) {
+                dataChunks.push(dataChunk);
+                dataLength += dataChunk.length;
+            }
+
+            resolve(Buffer.concat(dataChunks, dataLength));
+        });
     });
-
-    const dataChunks = [];
-    let dataLength = 0;
-
-    req.on('readable', () => {
-        let dataChunk;
-
-        while ((dataChunk = req.read()) !== null) {
-            dataChunks.push(dataChunk);
-            dataLength += dataChunk.length;
-        }
-
-        promiseCall.resolve(Buffer.concat(dataChunks, dataLength));
-    });
-
-    return promise;
 }
 
 /**
