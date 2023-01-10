@@ -1,6 +1,7 @@
 /**
  * Created by claudio on 2022-12-22
  */
+import zlib from 'node:zlib';
 
 /**
  * Checks whether an HTTP request has a JSON content type.
@@ -13,9 +14,15 @@ export function hasJSONContentType(req) {
 }
 
 /**
+ * @typedef {Object} ReadHttpReqBody
+ * @property {Buffer} raw
+ * @property {Buffer} [decoded]
+ */
+
+/**
  * Read data received from an HTTP request.
  * @param {module:http.IncomingMessage} req
- * @return {Promise<Buffer>}
+ * @return {Promise<ReadHttpReqBody>}
  */
 export function readData(req) {
     return new Promise((resolve, reject) => {
@@ -32,7 +39,19 @@ export function readData(req) {
                 dataLength += dataChunk.length;
             }
 
-            resolve(Buffer.concat(dataChunks, dataLength));
+            /**
+             * @type {ReadHttpReqBody}
+             */
+            let data = {
+                raw: Buffer.concat(dataChunks, dataLength)
+            };
+
+            if (req.headers['content-encoding'] === 'deflate') {
+                // Body data is compressed. Decompress it
+                data.decoded = zlib.inflateSync(data.raw);
+            }
+
+            resolve(data);
         });
     });
 }

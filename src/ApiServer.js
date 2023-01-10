@@ -22,6 +22,7 @@ const httpContextType = parseType(`{
     expectedRequest: {
         httpMethod: HttpMethod,
         apiMethodPath: HttpPath,
+        headers: Maybe HttpHeaderSpec,
         data: Maybe JsonData,
         authenticate: Maybe Boolean
     },
@@ -79,9 +80,19 @@ export const nonEmptyStringTypeDef = {
     typeOf: 'String',
     validate: d => d.length > 0
 };
+const httpHeaderSpecTypeDef = {
+    typeOf: 'Object',
+    validate: o => {
+        return Object.values(o).every(v => typeof v === 'string' || v === null);
+    }
+};
 
 /**
  * @typedef {('GET','POST')} HttpRequestMethod
+ */
+
+/**
+ * @typedef {Object<string,(string|null)>} HttpHeaderSpec
  */
 
 /**
@@ -89,6 +100,9 @@ export const nonEmptyStringTypeDef = {
  * @property {HttpRequestMethod} httpMethod HTML method of request.
  * @property {string} apiMethodPath Catenis API method path, with an optional leading '/' character and query string
  *                                   (e.g. /messages/mjvHYitWYCbJHvKqT3vk?encoding=utf8).
+ * @property {HttpHeaderSpec} [headers] HTTP header in the request. If the value is set to null, it means that the HTTP
+ *                                       header should NOT be present. Otherwise, the HTTP header should be present. If
+ *                                       the value is an empty string, it means that the header could have any value.
  * @property {string} [data] JSON of the received data.
  * @property {boolean} [authenticate=true] Indicates whether the request should be authenticated (validate Authorization
  *                                          header)
@@ -223,19 +237,55 @@ export class ApiServer {
                         return;
                     }
 
+                    if (this._httpContext.expectedRequest.headers) {
+                        // Validate request headers
+                        const headerNames = Object.keys(this._httpContext.expectedRequest.headers);
+
+                        for (let idx = 0, limit = headerNames.length; idx < limit; idx++) {
+                            const headerName = headerNames[idx];
+                            const headerValue = this._httpContext.expectedRequest.headers[headerName];
+
+                            if (typeof headerValue === 'string') {
+                                // Make sure that header is present
+                                const lowercaseHeaderName = headerName.toLowerCase();
+
+                                if (!(lowercaseHeaderName in req.headers)) {
+                                    sendErrorResponse(req, res, 500, `Missing required HTTP header: ${headerName}`);
+                                    return;
+                                }
+
+                                if (headerValue.length > 0) {
+                                    // Make sure that header has the specified value
+                                    if (headerValue !== req.headers[lowercaseHeaderName]) {
+                                        sendErrorResponse(req, res, 500, `Inconsistent value for HTTP header ${headerName}: expected: ${headerValue}; received: ${req.headers[lowercaseHeaderName]}`);
+                                        return;
+                                    }
+                                }
+                            }
+                            else if (headerValue === null) {
+                                // Make sure that header is not present
+                                if (headerName.toLowerCase() in req.headers) {
+                                    sendErrorResponse(req, res, 500, `Unexpected HTTP header: ${headerName}`);
+                                    return;
+                                }
+                            }
+                        }
+                    }
+
                     // Validate request body
                     const reqBody = await readData(req);
+                    const bodyData = reqBody.decoded ? reqBody.decoded : reqBody.raw;
 
-                    if (reqBody.length > 0) {
+                    if (bodyData.length > 0) {
                         if (!hasJSONContentType(req)) {
                             sendErrorResponse(req, res, 500, `Inconsistent content type: expected: application/json; received: ${req.headers['content-type']}`);
                             return;
                         }
 
-                        const strBody = reqBody.toString();
+                        const strBodyData = bodyData.toString();
 
-                        if (strBody !== this._httpContext.expectedRequest.data) {
-                            sendErrorResponse(req, res, 500, `Unexpected HTTP request body:\n expected: ${this._httpContext.expectedRequest.data}\n received: ${strBody}`);
+                        if (strBodyData !== this._httpContext.expectedRequest.data) {
+                            sendErrorResponse(req, res, 500, `Unexpected HTTP request body:\n expected: ${this._httpContext.expectedRequest.data}\n received: ${strBodyData}`);
                             return;
                         }
                     }
@@ -246,7 +296,7 @@ export class ApiServer {
 
                     if (this._httpContext.expectedRequest.authenticate === true || this._httpContext.expectedRequest.authenticate === undefined) {
                         // Authenticate request
-                        const authResult = this.authenticateRequest(req, reqBody);
+                        const authResult = this.authenticateRequest(req, reqBody.raw);
 
                         if (typeof authResult === 'object') {
                             // Authentication has failed. Send error response
@@ -423,6 +473,7 @@ function isValidHttpContext(data) {
         customTypes: {
             HttpMethod: httpMethodTypeDef,
             HttpPath: httpPathTypeDef,
+            HttpHeaderSpec: httpHeaderSpecTypeDef,
             JsonData: jsonDataTypeDef
         }
     });

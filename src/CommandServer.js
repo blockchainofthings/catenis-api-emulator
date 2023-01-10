@@ -43,7 +43,7 @@ export class CommandServer {
                             sendSuccessResponse(req, res, JSON.stringify(this.apiServer.credentials));
                         }
                         else if (req.method === 'POST' && hasJSONContentType(req)) {
-                            const body = await readData(req);
+                            const body = (await readData(req)).raw;
                             let error = false;
 
                             try {
@@ -77,7 +77,7 @@ export class CommandServer {
                             sendSuccessResponse(req, res, JSON.stringify(this.apiServer.httpContext));
                         }
                         else if (req.method === 'POST' && hasJSONContentType(req)) {
-                            const body = await readData(req);
+                            const body = (await readData(req)).raw;
                             let error = false;
 
                             try {
@@ -111,7 +111,7 @@ export class CommandServer {
                             sendSuccessResponse(req, res, JSON.stringify(this.wsNotifyServer.notifyContext));
                         }
                         else if (req.method === 'POST' && hasJSONContentType(req)) {
-                            const body = await readData(req);
+                            const body = (await readData(req)).raw;
                             let error = false;
 
                             try {
