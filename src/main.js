@@ -34,11 +34,33 @@ const optionDefinitions = [
     {name: 'api-port', alias: 'p', type: Number, defaultValue: 3500},
     {name: 'cmd-port', alias: 'c', type: Number, defaultValue: 3501},
     {name: 'api-version', alias: 'a', type: String, defaultValue: '0.13'},
+    {name: 'silent', alias: 's', type: Boolean},
     {name: 'shutdown', alias: 'q', type: Boolean},
-    {name: 'verbose', alias: 'v', type: Boolean}
+    {name: 'help', alias: 'h', type: Boolean}
 ];
 
 const options = commandLineArgs(optionDefinitions);
+
+if (options['help']) {
+    console.log(`Catenis API Emulator (ver. ${appVersion})
+
+Usage: catenis-api-emulator [options]
+
+Options:
+  --api-port, -p <port>        (default: 3500) The TCP port at which the app's
+                                API server should be listening.
+  --cmd-port, -c <port>        (default: 3501) The TCP port at which the app's
+                                command server should be listening.
+  --api-version, -a <version>  (default: 0.13) The version of the Catenis API to
+                                target.
+  --silent, -s                 Run the app in silent mode: no messages are
+                                displayed.
+  --shutdown , -q              Terminate a running app whose command server is
+                                listening at the designated TCP port.
+  --help, -h                   Display this usage info.
+`);
+    process.exit(0);
+}
 
 display.info(`Catentis API Emulator (ver. ${appVersion})`);
 
@@ -71,7 +93,7 @@ else {
  * @param {...[*]} args
  */
 function checkDisplay(level, ...args) {
-    if (options['verbose'] && typeof console[level] === 'function') {
+    if (!options['silent'] && typeof console[level] === 'function') {
         console[level].call(undefined, ...args);
     }
 }
