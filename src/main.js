@@ -47,17 +47,17 @@ if (options['help']) {
 Usage: catenis-api-emulator [options]
 
 Options:
-  --api-port, -p <port>        (default: 3500) The TCP port at which the app's
+  -p, --api-port <port>        (default: 3500) The TCP port at which the app's
                                 API server should be listening.
-  --cmd-port, -c <port>        (default: 3501) The TCP port at which the app's
+  -c, --cmd-port <port>        (default: 3501) The TCP port at which the app's
                                 command server should be listening.
-  --api-version, -a <version>  (default: 0.13) The version of the Catenis API to
+  -a, --api-version <version>  (default: 0.13) The version of the Catenis API to
                                 target.
-  --silent, -s                 Run the app in silent mode: no messages are
+  -s, --silent                 Run the app in silent mode: no messages are
                                 displayed.
-  --shutdown , -q              Terminate a running app whose command server is
+  -q, --shutdown               Terminate a running app whose command server is
                                 listening at the designated TCP port.
-  --help, -h                   Display this usage info.
+  -h, --help                   Display this usage info.
 `);
     process.exit(0);
 }
