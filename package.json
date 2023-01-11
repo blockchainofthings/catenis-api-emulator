@@ -17,10 +17,14 @@
     "email": "claudio@hiades.com.br"
   },
   "license": "MIT",
+  "engines": {
+    "node": ">=18.0"
+  },
   "dependencies": {
     "command-line-args": "^5.2.1",
     "dayjs": "^1.11.7",
     "type-check": "^0.4.0",
     "ws": "^8.11.0"
-  }
+  },
+  "repository": "git@github.com:blockchainofthings/catenis-api-emulator.git"
 }
