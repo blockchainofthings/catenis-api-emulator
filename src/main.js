@@ -65,12 +65,15 @@ Options:
 display.info(`Catentis API Emulator (ver. ${appVersion})`);
 
 if (options['shutdown']) {
-    if (await checkShutdown(options['cmd-port'], appVersion)) {
-        display.log('Catenis API Emulator successfully shut down');
+    try {
+        if (await checkShutdown(options['cmd-port'], appVersion)) {
+            display.log('Catenis API Emulator successfully shut down');
+        }
+
         process.exit(0);
     }
-    else {
-        display.error('Unable to shut down Catenis API Emulator; either it is not running or it failed to process the close command');
+    catch (err) {
+        display.error(`${err}`);
         process.exit(-1);
     }
 }
